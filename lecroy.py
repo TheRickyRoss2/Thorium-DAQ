@@ -2,9 +2,9 @@ __author__ = "Ric Rodriguez"
 __email__ = "therickyross2@gmail.com"
 __project__ = "Thorium DAQ"
 
+from struct import unpack
 
 from visa import ResourceManager
-from struct import unpack
 
 
 class Oscilloscope(object):
@@ -21,9 +21,9 @@ class Oscilloscope(object):
         """
         self.inst = ResourceManager().open_resource("TCPIP0::" + ip_address + "::inst0::INSTR")
         print(self.inst.query("*IDN?;"))
-        self.inst.timeout=10000
+        self.inst.timeout = 10000
         print(self.inst.query("ASET;*OPC?"))
-        #self.inst.write(":WAV:FORM WORD;")
+        # self.inst.write(":WAV:FORM WORD;")
 
     def configure_channel(self, channel_number, volts_per_div):
         """
@@ -53,16 +53,22 @@ class Oscilloscope(object):
         :param None
         :return tuple (dt, voltage_values)
         """
+        channel_waveforms = []
 
         for channel in self.active_channels:
-            self.inst.write("{}:WF? DESC;".format(channel))
+            self.inst.write("{}:WF?;".format(channel))
             # Read formatted data back
             # Split at regex #9, and chomp off the first 9 bytes
             raw_data = self.inst.read_raw().split(b'#9')[1][9:]
             # dt is located at byte offset 176 with a size of 4 bytes
             dt = unpack('f', raw_data[176:180])[0]
             # dy is located at byte offset 160 with a size of 4 bytes
-            dy = unpack('f', raw_data[160:164])[0]
+            dy = unpack('f', raw_data[156:160])[0]
+
+            wave_source = {0: "Channel 1",
+                           2: "Channel 2",
+                           4: "Channel 3",
+                           8: "Channel 3"}.get(unpack('i', raw_data[344][0]))
 
             print("dy={}".format(dy))
             print("dt={}".format(dt))
@@ -72,19 +78,19 @@ class Oscilloscope(object):
             raw_waveform_data = self.inst.read_raw()[16:]
             print(len(raw_waveform_data))
             # for some reason chomp off the last byte? some mismatch
-            values = unpack('{}i'.format(len(raw_waveform_data)//4), raw_waveform_data[0:len(raw_waveform_data)-1])
+            values = unpack('{}i'.format(len(raw_waveform_data) // 4), raw_waveform_data[0:len(raw_waveform_data) - 1])
 
             # write data to csv file for debugging purposes
             f = open("out.csv", 'w')
             for idx, x in enumerate(values):
-                f.write("{}, {}\n".format(idx*dt[0], x*dy[0]))
+                f.write("{}, {}\n".format(idx * dt[0], x * dy[0]))
                 pass
             f.close()
+            channel_waveforms.append((wave_source, dt, values))
+        return channel_waveforms
 
     def close(self):
         """
         Close visa instance
         """
         self.inst.close()
-
-

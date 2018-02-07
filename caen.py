@@ -7,17 +7,6 @@ class Caen(object):
     """
     test_mode = False
 
-    def check_return_status(self, return_status=""):
-        """
-        Checks the return status of queries
-        :param return_status: Returned bytes of query
-        :return: True if command was executed successfully
-        """
-
-        if "ok" not in return_status.lower():
-            raise SystemError("Invalid command")
-        return True
-
     def __init__(self, ip_address=""):
         """
         Constructor for power supply object
@@ -32,6 +21,17 @@ class Caen(object):
         else:
             print("No ip address specified; Running in test mode.")
             self.test_mode = True
+
+    def check_return_status(self, return_status=""):
+        """
+        Checks the return status of queries
+        :param return_status: Returned bytes of query
+        :return: True if command was executed successfully
+        """
+
+        if "ok" not in return_status.lower():
+            raise SystemError("Invalid command")
+        return True
 
     def connection_sanity_check(self):
         return "ok" in self.inst.query("BD:0,CMD:MON,PAR:BDNAME").lower()
