@@ -1,3 +1,8 @@
+__author__ = "Ric Rodriguez"
+__email__ = "therickyross2@gmail.com"
+__project__ = "Thorium DAQ"
+
+
 from unittest import TestCase
 
 from caen import Caen
