@@ -3,7 +3,6 @@ __email__ = "therickyross2@gmail.com"
 __project__ = "Thorium DAQ"
 
 from struct import unpack
-
 from visa import ResourceManager
 
 
@@ -21,8 +20,7 @@ class Oscilloscope(object):
         """
         self.inst = ResourceManager().open_resource("TCPIP0::" + ip_address + "::inst0::INSTR")
         print(self.inst.query("*IDN?;"))
-        self.inst.timeout = 60000
-        print(self.inst.query("ASET;*OPC?"))
+        self.inst.timeout = 10000
         # self.inst.write(":WAV:FORM WORD;")
 
     def configure_channel(self, channel_number, volts_per_div):
