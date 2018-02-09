@@ -1,20 +1,56 @@
-from yaml import TagToken
-
 __author__ = "Ric Rodriguez"
 __email__ = "therickyross2@gmail.com"
 __project__ = "Thorium DAQ"
 
-from caen import Caen
-from lecroy import Oscilloscope
-import ROOT
-from array import array
-
 import configparser
+from array import array
+from copy import deepcopy
+from re import sub
+
+import ROOT
+import matplotlib.pyplot as plt
+
 
 class daq_runner:
     """
     """
     pass
+
+
+def convert_to_vector(dt, values):
+    list_channel_wfms = [None] * 4
+    cur_channel = -1
+    time_idx = 0
+    with open("sample_stripped.dat", 'w') as f:
+        waveform = []
+        for line in values:
+            for entry in line.split(" "):
+                if ":" in entry:
+                    if cur_channel >= 0:
+                        list_channel_wfms[cur_channel] = waveform
+                        waveform = []
+                        time_idx = 0
+                    cur_channel = int(sub('[^0-9]', '', entry)) - 1
+                    print("Current channel: " + str(cur_channel))
+                else:
+                    try:
+                        volt = float(entry.strip())
+                        waveform.append((dt * time_idx, volt))
+                        time_idx += 1
+                    except:
+                        pass
+        list_channel_wfms[cur_channel] = deepcopy(waveform)
+    for channel in list_channel_wfms:
+        time = []
+        volt = []
+        for entry in channel:
+            time.append(entry[0])
+            volt.append(entry[1])
+
+        plt.plot(time, volt)
+        plt.show()
+        input(">")
+
 
 
 if __name__ == "__main__":
@@ -45,23 +81,6 @@ $$$$$$$$/ $$ |____    ______    ______  $$/  __    __  _____  ____
     print(config.get('caen', 'iset'))
     print(config.getboolean('lecroy', 'enable_channel1'))
 
-    print("*"*80)
-    print("TESTING LECROY")
-    lecroy_scope = Oscilloscope("192.168.2.3")
-    print("*"*80)
-    raw_dt = lecroy_scope.inst.query("C2:INSPECT? HORIZ_INTERVAL")
-    dt = float(raw_dt.split(":")[2].split(" ")[1])
-    print("dt:" + str(dt))
-
-    values = lecroy_scope.inst.query("C1:INSPECT? SIMPLE;C2:INSPECT? SIMPLE;C3:INSPECT? SIMPLE;C4:INSPECT? SIMPLE")
-    print("done acquiring")
-    f = open("sample4.dat", 'w')
-    f.write(values)
-    f.close()
-    lecroy_scope.close()
-    #caen_psu = Caen("169.168.2.5")
-
-"""
     h = ROOT.TH1F( 'h1', 'test', 100, -10., 10.)
     f = ROOT.TFile('test.root', 'recreate')
     t = ROOT.TTree('t1', 'tree with histos')
@@ -77,4 +96,22 @@ $$$$$$$$/ $$ |____    ______    ______  $$/  __    __  _____  ____
         t.Fill()
     f.Write()
     f.Close()
+    convert_to_vector(1.25e-12, open("sample4.dat").readlines())
+
+"""
+    print("*"*80)
+    print("TESTING LECROY")
+    lecroy_scope = Oscilloscope("192.168.2.3")
+    print("*"*80)
+    raw_dt = lecroy_scope.inst.query("C2:INSPECT? HORIZ_INTERVAL")
+    dt = float(raw_dt.split(":")[2].split(" ")[1])
+    print("dt:" + str(dt))
+
+    values = lecroy_scope.inst.query("C1:INSPECT? SIMPLE;C2:INSPECT? SIMPLE;C3:INSPECT? SIMPLE;C4:INSPECT? SIMPLE")
+    print("done acquiring")
+    f = open("sample4.dat", 'w')
+    f.write(values)
+    f.close()
+    lecroy_scope.close()
+    #caen_psu = Caen("169.168.2.5")
 """
