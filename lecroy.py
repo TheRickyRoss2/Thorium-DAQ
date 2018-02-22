@@ -3,6 +3,7 @@ __email__ = "therickyross2@gmail.com"
 __project__ = "Thorium DAQ"
 
 from struct import unpack
+
 from visa import ResourceManager
 
 
@@ -44,6 +45,7 @@ class Oscilloscope(object):
         """
         self.inst.write(":TRIG:EDGE:SOUR %s;:TRIG:EDGE:SLOP %s;".format(channel_number, edge_slope))
         self.inst.write(":TRIG:LEV %s,%s;".format(channel_number, thresh_level))
+        self.inst.write(":TRIG:MODE NORM;")
 
     def get_waveforms(self):
         """

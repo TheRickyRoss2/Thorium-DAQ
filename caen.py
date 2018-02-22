@@ -100,3 +100,4 @@ class Caen(object):
         response = self.inst.query("$BD:0,CMD:MON,PAR:BDALARM")
         # TODO Logic for discerning bits
         # Bits 0-3 correspond to channels; if one of these bits is set then trigger alarm
+
