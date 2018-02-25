@@ -44,7 +44,6 @@ class Caen(object):
         :param return_status: Returned bytes of query
         :return: True if command was executed successfully
         """
-        return return_status
 
         if "ok" not in return_status.lower():
             raise SystemError("Invalid command")
@@ -104,22 +103,37 @@ class Caen(object):
         response = self.query(command_format)
         return self.check_return_status(response)
 
+    def get_response_value(self, response_string):
+        return response_string.split(":")[-1].strip()
+
     def status_check(self, step_channel):
         """
         Checks status of channel
         :return:
         """
-        "$BD:0,CMD:MON,CH:X,PAR:STAT"
+        status_bits = ["ON", "RAMP UP", "RAMP DOWN", "IMON>=ISET", "VMON>VSET+2.5V",
+                       "VMON<VSET–2.5V", "VOUT in MAXV protection", "Ch OFF via TRIP (Imon>=Iset during TRIP)",
+                       "Output Power > Max", "TEMP>105°C", "Ch disabled (REMOTE Mode and Switch on OFF position)",
+                       "Ch in KILL via front panel", "Ch in INTERLOCK via front panel", "Calibration Error"
+                       ]
         command_format = "$BD:0,CMD:MON,CH:{},PAR:STAT".format(self.caen_channel)
-        response = self.query(command_format)
-        return response
+        response = int(self.get_response_value(self.query(command_format)))
+        status = []
+        counter = 0
+        while response != 0:
+            if response & 0x1:
+                status.append(status_bits[counter])
+            response = response >> 1
+            counter += 1
+
+        return status
 
     def alarm_check(self):
         """
         Checks device for errors, but mainly looking for IMON>ISET
         :return: True if device checks out
         """
-        response = self.query("$BD:0,CMD:MON,PAR:BDALARM")
+        response = int(self.query("$BD:0,CMD:MON,PAR:BDALARM"))
         # TODO Logic for discerning bits
         # Bits 0-3 correspond to channels; if one of these bits is set then trigger alarm
 

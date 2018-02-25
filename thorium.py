@@ -2,8 +2,10 @@ __author__ = "Ric Rodriguez"
 __email__ = "therickyross2@gmail.com"
 __project__ = "Thorium DAQ"
 
+import argparse
 import configparser
-import threading
+import sys
+import time
 from copy import deepcopy
 from queue import Queue
 from re import sub
@@ -14,22 +16,14 @@ from lecroy import Oscilloscope
 queue_stop = Queue()
 
 
-class get_interrupt(threading.Thread):
-    def __init__(self):
-        threading.Thread.__init__(self)
-
-    def run(self):
-        pass
-
-
-class daq_runner:
+class DaqRunner:
     """
     Data Acqusition state machine
     """
     list_events = []
 
-    def __init__(self, scope_ip, num_events, channel_mask, output_filename, stop_queue,
-                 caen_ip, volt_list
+    def __init__(self, scope_ip, num_events, active_channels, output_filename, stop_queue,
+                 caen_ip, volt_list, caen_channel
                  ):
         """
         Initializer function for the DAQ state machine
@@ -44,18 +38,32 @@ class daq_runner:
         self.output_filename = output_filename
         self.num_events = num_events
         self.scope = Oscilloscope(scope_ip)
-        self.channels = [False] * 4
-        self.set_channels(channel_mask)
+        self.channels = active_channels
         self.dt = 0
-
-        self.get_timebase()
-        self.get_events()
-        self.dump_data()
-
-        self.scope.close()
+        self.caen_channel = caen_channel
         self.stop_queue = stop_queue
 
-    def dump_data(self):
+        if "ON" not in self.caen.status_check(self.caen_channel):
+            self.caen.enable_output(self.caen_channel, True)
+
+        for volt in self.volt_list:
+
+            self.caen.set_output(self.caen_channel, volt)
+            time.sleep(5)
+            while "RAMP UP" in self.caen.status_check(self.caen_channel):
+                pass
+
+            self.get_timebase()
+            self.get_events()
+            self.dump_data(volt)
+        self.caen.set_output(self.caen_channel, "0")
+        print("Acqusition complete")
+        while "RAMP DOWN" in self.caen.status_check(self.caen_channel):
+            pass
+        self.scope.close()
+        self.caen.close()
+
+    def dump_data(self, volt):
         """
         Writes data to file as a vectorized representation of the
         events->channels->voltage readings
@@ -63,7 +71,7 @@ class daq_runner:
         """
 
         print("dumping data")
-        output_file = open(self.output_filename, 'w')
+        output_file = open(self.output_filename + "_{}V".format(volt), 'w')
         for event_num, event in enumerate(self.list_events):
             for channel_num, channel in enumerate(event):
                 if channel:
@@ -76,50 +84,29 @@ class daq_runner:
 
         output_file.close()
 
-    def set_channels(self, channel_mask):
-        """
-        Prepares the channels for recieving data acquisition
-        :param channel_mask: Hex format of channels i.e. 0x2 repesents channel 2
-        :return: None
-        """
-
-        ch_idx = 0
-        while channel_mask != 0:
-            if channel_mask & 1:
-                self.channels[ch_idx] = True
-            ch_idx += 1
-            channel_mask = channel_mask >> 1
-        print("set channels")
-        for i, d in enumerate(self.channels):
-            if d:
-                print(i)
-
     def get_events(self):
         """
         Gets event for requested channels from oscilloscope
         :return: List of channels and their voltage values
         """
 
-        for volt in volt_list:
-            self.caen.set_output(volt)
-            for event in range(self.num_events):
+        for event in range(self.num_events):
+            if not self.stop_queue.empty():
+                print("STOPPING DAQ")
+                return
 
-                if not self.stop_queue.empty():
-                    print("STOPPING DAQ")
-                    return
-
-                # event_wfm = self.scope.get_waveforms()
-                command_payload = ""
-                for channel_number, active_channel in enumerate(self.channels):
-                    if active_channel:
-                        command_payload += "C{}:INSPECT? SIMPLE;".format(channel_number)
-                self.list_events.append(
-                    convert_to_vector(
-                        self.dt,
-                        self.scope.inst.query(command_payload),
-                        self.channels
-                    )
+            # event_wfm = self.scope.get_waveforms()
+            command_payload = ""
+            for channel_number, active_channel in enumerate(self.channels):
+                if active_channel:
+                    command_payload += "C{}:INSPECT? SIMPLE;".format(channel_number)
+            self.list_events.append(
+                self.convert_to_vector(
+                    self.dt,
+                    self.scope.inst.query(command_payload),
+                    self.channels
                 )
+            )
 
     def get_timebase(self):
         """
@@ -132,41 +119,40 @@ class daq_runner:
         print("dt:" + str(dt))
         self.dt = dt
 
+    def convert_to_vector(self, dt, values, channels):
+        """
+        Helper function for converting the values from the oscilloscope
+        to a vectorized quantity suitable for translation to a root TTree
+        :param dt: Value of each dt in points
+        :param values: Raw oscilloscope voltage values
+        :param channels: which channels are active
+        :return: Vectorized representation of oscilloscope values
+        """
+        list_channel_wfms = [None] * 4
+        cur_channel = -1
+        time_idx = 0
 
-def convert_to_vector(dt, values, channels):
-    """
-    Helper function for converting the values from the oscilloscope
-    to a vectorized quantity suitable for translation to a root TTree
-    :param dt: Value of each dt in points
-    :param values: Raw oscilloscope voltage values
-    :param channels: which channels are active
-    :return: Vectorized representation of oscilloscope values
-    """
-    list_channel_wfms = [None] * 4
-    cur_channel = -1
-    time_idx = 0
+        if values is not None:
+            waveform = []
 
-    if values is not None:
-        waveform = []
+            for line in values.split("\r\n"):
+                for entry in line.split(" "):
+                    if ":" in entry:
+                        if cur_channel >= 0:
+                            list_channel_wfms[cur_channel] = waveform
+                            waveform = []
+                            time_idx = 0
+                        cur_channel = int(sub('[^0-9]', '', entry)) - 1
+                    else:
+                        try:
+                            volt = float(entry.strip())
+                            waveform.append((dt * time_idx, volt))
+                            time_idx += 1
+                        except:
+                            pass
+            list_channel_wfms[cur_channel] = deepcopy(waveform)
 
-        for line in values.split("\r\n"):
-            for entry in line.split(" "):
-                if ":" in entry:
-                    if cur_channel >= 0:
-                        list_channel_wfms[cur_channel] = waveform
-                        waveform = []
-                        time_idx = 0
-                    cur_channel = int(sub('[^0-9]', '', entry)) - 1
-                else:
-                    try:
-                        volt = float(entry.strip())
-                        waveform.append((dt * time_idx, volt))
-                        time_idx += 1
-                    except:
-                        pass
-        list_channel_wfms[cur_channel] = deepcopy(waveform)
-
-    return list_channel_wfms
+        return list_channel_wfms
 
 
 if __name__ == "__main__":
@@ -182,20 +168,37 @@ $$$$$$$$/ $$ |____    ______    ______  $$/  __    __  _____  ____
    $$ |   $$ |  $$ |$$    $$/ $$ |      $$ |$$    $$/ $$ | $$ | $$ |
    $$/    $$/   $$/  $$$$$$/  $$/       $$/  $$$$$$/  $$/  $$/  $$/  
     """)
-    print("By: Ric Rodriguez")
-    print("For support or bug report submission: Please email Ric at therickyross2@gmail.com")
+    print("For support or bug report submission: Please email Ric <therickyross2@gmail.com>")
 
-    with open("config.ini") as settings:
-        daq_settings = settings.read()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", help="Config file with settings for DAQ")
+    parser.add_argument("--outfile", help="Output filename")
+    args = parser.parse_args()
+    if args.config:
+        print("Loading in " + args.config)
+    else:
+        print("No config file specified. Exiting now")
+        sys.exit(1)
+
+    if args.outfile:
+        print("Saving to " + args.outfile)
+    else:
+        print("No output file specified. Using latest_daq.root")
+        args.outfile = "latest_daq.root"
+
+
     config = configparser.RawConfigParser(allow_no_value=True)
-    config.read_file(open("config.ini"))
+    config.read_file(open(args.config))
 
-    for section in config.sections():
-        print("Section: {}".format(section))
-        for options in config.options(section):
-            print("x {}::{}::{}".format(options, config.get(section, options), str(type(options))))
-    print(config.get('caen', 'iset'))
-    print(config.getboolean('lecroy', 'enable_channel1'))
+    active_channels = []
+    for num_channel in range(1, 5):
+        active_channels.append(config.getboolean("lecroy", "read_ch{}".format(num_channel)))
+    lecroy_ip = config.get("lecroy", "ip")
+    caen_ip = config.get("caen", "ip")
+    volt_list = config.get("caen", "volts").split(",")
+    caen_channel = config.get("caen", "step_channel")
+    num_events = config.get("daq", "events")
+
     """
     h = ROOT.TH1F( 'h1', 'test', 100, -10., 10.)
     f = ROOT.TFile('test.root', 'recreate')
@@ -212,43 +215,8 @@ $$$$$$$$/ $$ |____    ______    ______  $$/  __    __  _____  ____
         t.Fill()
     f.Write()
     f.Close()
-    
     convert_to_vector(1.25e-12, open("sample4.dat").readlines())
     """
-    import time
 
-    # daq_runner("192.168.1.5", 20, 0x2, "run.raw", queue_stop)
+    DaqRunner(lecroy_ip, num_events, active_channels, args.outfile, queue_stop, caen_ip, volt_list, caen_channel)
     caen = Caen("192.168.2.4")
-    # print(caen.enable_output(channel="2", enable=True))
-    print(caen.enable_output("2", enable=True))
-    print(caen.set_output(channel="2", voltage="25"))
-    print(caen.status_check("2"))
-    time.sleep(10)
-    print(caen.status_check("2"))
-    while "3" in caen.status_check("2"):
-        pass
-    print("DONE RAMPED UP")
-    print(caen.set_output(channel="2", voltage="0"))
-    time.sleep(10)
-    while "5" in caen.status_check("2"):
-        pass
-    print("DONE RAMPED DOWN")
-    print(caen.enable_output("2", enable=False))
-
-"""
-    print("*"*80)
-    print("TESTING LECROY")
-    lecroy_scope = Oscilloscope("192.168.2.3")
-    print("*"*80)
-    raw_dt = lecroy_scope.inst.query("C2:INSPECT? HORIZ_INTERVAL")
-    dt = float(raw_dt.split(":")[2].split(" ")[1])
-    print("dt:" + str(dt))
-
-    values = lecroy_scope.inst.query("C1:INSPECT? SIMPLE;C2:INSPECT? SIMPLE;C3:INSPECT? SIMPLE;C4:INSPECT? SIMPLE")
-    print("done acquiring")
-    f = open("sample4.dat", 'w')
-    f.write(values)
-    f.close()
-    lecroy_scope.close()
-    #caen_psu = Caen("169.168.2.5")
-"""

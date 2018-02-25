@@ -49,6 +49,7 @@ class Oscilloscope(object):
 
     def get_waveforms(self):
         """
+        NOTE: DEPRECATED DO NOT USE
         Acquires waveforms from devices
         :param None
         :return tuple (dt, voltage_values)
