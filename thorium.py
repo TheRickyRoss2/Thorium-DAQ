@@ -8,7 +8,10 @@ from copy import deepcopy
 from queue import Queue
 from re import sub
 
+from caen import Caen
 from lecroy import Oscilloscope
+
+queue_stop = Queue()
 
 
 class get_interrupt(threading.Thread):
@@ -25,20 +28,40 @@ class daq_runner:
     """
     list_events = []
 
-    def __init__(self, ip_address, num_events, channel_mask, output_filename):
+    def __init__(self, scope_ip, num_events, channel_mask, output_filename, stop_queue,
+                 caen_ip, volt_list
+                 ):
+        """
+        Initializer function for the DAQ state machine
+        :param ip_address: IP address of scope
+        :param num_events: number of event that we would like
+        :param channel_mask: Which channels we want in hex
+        :param output_filename: file to dump data to
+        """
 
+        self.caen = Caen(caen_ip)
+        self.volt_list = volt_list
         self.output_filename = output_filename
         self.num_events = num_events
-        self.scope = Oscilloscope(ip_address)
+        self.scope = Oscilloscope(scope_ip)
         self.channels = [False] * 4
         self.set_channels(channel_mask)
         self.dt = 0
+
         self.get_timebase()
         self.get_events()
         self.dump_data()
+
         self.scope.close()
+        self.stop_queue = stop_queue
 
     def dump_data(self):
+        """
+        Writes data to file as a vectorized representation of the
+        events->channels->voltage readings
+        :return: None
+        """
+
         print("dumping data")
         output_file = open(self.output_filename, 'w')
         for event_num, event in enumerate(self.list_events):
@@ -54,6 +77,12 @@ class daq_runner:
         output_file.close()
 
     def set_channels(self, channel_mask):
+        """
+        Prepares the channels for recieving data acquisition
+        :param channel_mask: Hex format of channels i.e. 0x2 repesents channel 2
+        :return: None
+        """
+
         ch_idx = 0
         while channel_mask != 0:
             if channel_mask & 1:
@@ -66,18 +95,38 @@ class daq_runner:
                 print(i)
 
     def get_events(self):
-        for event in range(self.num_events):
-            # event_wfm = self.scope.get_waveforms()
-            self.list_events.append(
-                convert_to_vector(
-                    self.dt,
-                    self.scope.inst.query(
-                        "C1:INSPECT? SIMPLE;C2:INSPECT? SIMPLE;C3:INSPECT? SIMPLE;C4:INSPECT? SIMPLE;"),
-                    self.channels
+        """
+        Gets event for requested channels from oscilloscope
+        :return: List of channels and their voltage values
+        """
+
+        for volt in volt_list:
+            self.caen.set_output(volt)
+            for event in range(self.num_events):
+
+                if not self.stop_queue.empty():
+                    print("STOPPING DAQ")
+                    return
+
+                # event_wfm = self.scope.get_waveforms()
+                command_payload = ""
+                for channel_number, active_channel in enumerate(self.channels):
+                    if active_channel:
+                        command_payload += "C{}:INSPECT? SIMPLE;".format(channel_number)
+                self.list_events.append(
+                    convert_to_vector(
+                        self.dt,
+                        self.scope.inst.query(command_payload),
+                        self.channels
+                    )
                 )
-            )
 
     def get_timebase(self):
+        """
+        Retrieves the active horizontal timebase of the scope
+        :return: float representation of the timebase
+        """
+
         raw_dt = self.scope.inst.query("C2:INSPECT? HORIZ_INTERVAL")
         dt = float(raw_dt.split(":")[2].split(" ")[1])
         print("dt:" + str(dt))
@@ -85,11 +134,21 @@ class daq_runner:
 
 
 def convert_to_vector(dt, values, channels):
+    """
+    Helper function for converting the values from the oscilloscope
+    to a vectorized quantity suitable for translation to a root TTree
+    :param dt: Value of each dt in points
+    :param values: Raw oscilloscope voltage values
+    :param channels: which channels are active
+    :return: Vectorized representation of oscilloscope values
+    """
     list_channel_wfms = [None] * 4
     cur_channel = -1
     time_idx = 0
+
     if values is not None:
         waveform = []
+
         for line in values.split("\r\n"):
             for entry in line.split(" "):
                 if ":" in entry:
@@ -108,7 +167,6 @@ def convert_to_vector(dt, values, channels):
         list_channel_wfms[cur_channel] = deepcopy(waveform)
 
     return list_channel_wfms
-
 
 
 if __name__ == "__main__":
@@ -157,8 +215,25 @@ $$$$$$$$/ $$ |____    ______    ______  $$/  __    __  _____  ____
     
     convert_to_vector(1.25e-12, open("sample4.dat").readlines())
     """
-    queue_stop = Queue()
-    daq_runner("192.168.1.5", 20, 0x2, "run.raw")
+    import time
+
+    # daq_runner("192.168.1.5", 20, 0x2, "run.raw", queue_stop)
+    caen = Caen("192.168.2.4")
+    # print(caen.enable_output(channel="2", enable=True))
+    print(caen.enable_output("2", enable=True))
+    print(caen.set_output(channel="2", voltage="25"))
+    print(caen.status_check("2"))
+    time.sleep(10)
+    print(caen.status_check("2"))
+    while "3" in caen.status_check("2"):
+        pass
+    print("DONE RAMPED UP")
+    print(caen.set_output(channel="2", voltage="0"))
+    time.sleep(10)
+    while "5" in caen.status_check("2"):
+        pass
+    print("DONE RAMPED DOWN")
+    print(caen.enable_output("2", enable=False))
 
 """
     print("*"*80)

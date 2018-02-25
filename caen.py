@@ -2,8 +2,7 @@ __author__ = "Ric Rodriguez"
 __email__ = "therickyross2@gmail.com"
 __project__ = "Thorium DAQ"
 
-
-from visa import ResourceManager
+import socket
 
 
 class Caen(object):
@@ -12,20 +11,32 @@ class Caen(object):
     """
     test_mode = False
 
-    def __init__(self, ip_address=""):
+    def __init__(self, ip_address="", channel="2"):
         """
         Constructor for power supply object
         :param ip_address: Ethernet address of supply
         """
 
+        self.caen_channel = channel
+
         if ip_address:
-            self.inst = ResourceManager().open_resource("TCPIP0::" + ip_address + "::inst0::INSTR")
-            print(self.inst.query("$BD:0,CMD:MON,PAR:BDNAME"))
-            print(self.inst.query("$BD:0,CMD:MON,PAR:BDFREL"))
-            print(self.inst.query("$BD:0,CMD:MON,PAR:BDSNUM"))
+            # self.inst = ResourceManager().open_resource("TCPIP0::" + ip_address + "::inst0::INSTR")
+            self.caen_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            server_address = (ip_address, 10000)
+            self.caen_sock.connect(server_address)
+
+            print(self.query("$BD:0,CMD:MON,PAR:BDNAME"))
+            print(self.query("$BD:0,CMD:MON,PAR:BDFREL"))
+            print(self.query("$BD:0,CMD:MON,PAR:BDSNUM"))
         else:
             print("No ip address specified; Running in test mode.")
             self.test_mode = True
+
+    def query(self, command):
+        payload = command.encode()
+        self.caen_sock.sendall(payload)
+        response = self.caen_sock.recv(2048)
+        return response.decode()
 
     def check_return_status(self, return_status=""):
         """
@@ -33,13 +44,14 @@ class Caen(object):
         :param return_status: Returned bytes of query
         :return: True if command was executed successfully
         """
+        return return_status
 
         if "ok" not in return_status.lower():
             raise SystemError("Invalid command")
         return True
 
     def connection_sanity_check(self):
-        return "ok" in self.inst.query("BD:0,CMD:MON,PAR:BDNAME").lower()
+        return "ok" in self.query("BD:0,CMD:MON,PAR:BDNAME").lower()
 
     def setup_channel(self, channel, compliance):
         """
@@ -54,7 +66,7 @@ class Caen(object):
         if self.test_mode:
             return "TEST MODE: " + command_format
 
-        response = self.inst.query(command_format)
+        response = self.query(command_format)
         return self.check_return_status(response)
 
     def set_output(self, channel, voltage):
@@ -72,7 +84,7 @@ class Caen(object):
             return "TEST MODE: " + command_format
 
         # Send query to device
-        response = self.inst.query(command_format)
+        response = self.query(command_format)
         # Verify command was executed successfully
         return self.check_return_status(response)
 
@@ -89,15 +101,27 @@ class Caen(object):
         if self.test_mode:
             return "TEST MODE: " + command_format
 
-        response = self.inst.query(command_format)
+        response = self.query(command_format)
         return self.check_return_status(response)
 
-    def status_check(self):
+    def status_check(self, step_channel):
+        """
+        Checks status of channel
+        :return:
+        """
+        "$BD:0,CMD:MON,CH:X,PAR:STAT"
+        command_format = "$BD:0,CMD:MON,CH:{},PAR:STAT".format(self.caen_channel)
+        response = self.query(command_format)
+        return response
+
+    def alarm_check(self):
         """
         Checks device for errors, but mainly looking for IMON>ISET
         :return: True if device checks out
         """
-        response = self.inst.query("$BD:0,CMD:MON,PAR:BDALARM")
+        response = self.query("$BD:0,CMD:MON,PAR:BDALARM")
         # TODO Logic for discerning bits
         # Bits 0-3 correspond to channels; if one of these bits is set then trigger alarm
 
+    def close(self):
+        self.caen_sock.close()

@@ -12,7 +12,7 @@ class TestCaen(TestCase):
     """
     Class for testing caen power supply command formatting
     """
-    caen_test_runner = Caen(ip_address="192.168.1.40")
+    caen_test_runner = Caen(ip_address="192.168.1.10")
 
     def test_check_return_status(self):
         self.assertTrue(self.caen_test_runner.check_return_status("brd:cmd:ok"))
@@ -27,3 +27,4 @@ class TestCaen(TestCase):
     def test_enable_output(self):
         self.assertTrue("ON", self.caen_test_runner.enable_output(2, True))
         self.assertTrue("OFF", self.caen_test_runner.enable_output(2, enable=False))
+        self.caen_test_runner.close()
