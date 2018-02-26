@@ -19,6 +19,9 @@ class Oscilloscope(object):
         Resets scope
         :param ip_address: Ethernet address of scope
         """
+        if not ip_address:
+            print("No ip address specified. Running in test mode.")
+            return
         self.inst = ResourceManager().open_resource("TCPIP0::" + ip_address + "::inst0::INSTR")
         print(self.inst.query("*IDN?;"))
         self.inst.timeout = 10000

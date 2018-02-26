@@ -9,6 +9,7 @@ import time
 from copy import deepcopy
 from queue import Queue
 from re import sub
+from threading import Thread
 
 from caen import Caen
 from lecroy import Oscilloscope
@@ -16,7 +17,17 @@ from lecroy import Oscilloscope
 queue_stop = Queue()
 
 
-class DaqRunner:
+def ui_handler(interrupt_queue):
+    time.sleep(10)
+    while True:
+        command = input("Type s to stop experiment $>")
+        if "s" in command.lower():
+            break
+    queue_stop.put("STOP")
+    print("STOPPING EXPERIMENT")
+
+
+class DaqRunner(object):
     """
     Data Acqusition state machine
     """
@@ -47,7 +58,8 @@ class DaqRunner:
             self.caen.enable_output(self.caen_channel, True)
 
         for volt in self.volt_list:
-
+            if not self.stop_queue.empty():
+                break
             self.caen.set_output(self.caen_channel, volt)
             time.sleep(5)
             while "RAMP UP" in self.caen.status_check(self.caen_channel):
@@ -100,11 +112,10 @@ class DaqRunner:
             for channel_number, active_channel in enumerate(self.channels):
                 if active_channel:
                     command_payload += "C{}:INSPECT? SIMPLE;".format(channel_number)
+
             self.list_events.append(
                 self.convert_to_vector(
-                    self.dt,
-                    self.scope.inst.query(command_payload),
-                    self.channels
+                    self.scope.inst.query(command_payload)
                 )
             )
 
@@ -119,11 +130,10 @@ class DaqRunner:
         print("dt:" + str(dt))
         self.dt = dt
 
-    def convert_to_vector(self, dt, values, channels):
+    def convert_to_vector(self, values):
         """
         Helper function for converting the values from the oscilloscope
         to a vectorized quantity suitable for translation to a root TTree
-        :param dt: Value of each dt in points
         :param values: Raw oscilloscope voltage values
         :param channels: which channels are active
         :return: Vectorized representation of oscilloscope values
@@ -135,7 +145,8 @@ class DaqRunner:
         if values is not None:
             waveform = []
 
-            for line in values.split("\r\n"):
+            for line in values.split("\n"):
+                # print("Parsing line=>"+line)
                 for entry in line.split(" "):
                     if ":" in entry:
                         if cur_channel >= 0:
@@ -143,10 +154,11 @@ class DaqRunner:
                             waveform = []
                             time_idx = 0
                         cur_channel = int(sub('[^0-9]', '', entry)) - 1
+                        print("Set current channel to " + str(cur_channel))
                     else:
                         try:
                             volt = float(entry.strip())
-                            waveform.append((dt * time_idx, volt))
+                            waveform.append((self.dt * time_idx, volt))
                             time_idx += 1
                         except:
                             pass
@@ -156,6 +168,7 @@ class DaqRunner:
 
 
 if __name__ == "__main__":
+    # Info section
     print("""Welcome to
     
  ________  __                            __                         
@@ -170,6 +183,7 @@ $$$$$$$$/ $$ |____    ______    ______  $$/  __    __  _____  ____
     """)
     print("For support or bug report submission: Please email Ric <therickyross2@gmail.com>")
 
+    # Command argument parsing
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", help="Config file with settings for DAQ")
     parser.add_argument("--outfile", help="Output filename")
@@ -179,17 +193,15 @@ $$$$$$$$/ $$ |____    ______    ______  $$/  __    __  _____  ____
     else:
         print("No config file specified. Exiting now")
         sys.exit(1)
-
     if args.outfile:
         print("Saving to " + args.outfile)
     else:
         print("No output file specified. Using latest_daq.root")
         args.outfile = "latest_daq.root"
 
-
+    # Config file loading
     config = configparser.RawConfigParser(allow_no_value=True)
     config.read_file(open(args.config))
-
     active_channels = []
     for num_channel in range(1, 5):
         active_channels.append(config.getboolean("lecroy", "read_ch{}".format(num_channel)))
@@ -198,25 +210,44 @@ $$$$$$$$/ $$ |____    ______    ______  $$/  __    __  _____  ____
     volt_list = config.get("caen", "volts").split(",")
     caen_channel = config.get("caen", "step_channel")
     num_events = config.get("daq", "events")
+    """
+    # ROOT TTree file handlers
+    tree_file = ROOT.TFile("tester1.root", "recreate")
+    tree = ROOT.TTree("wfm", "tree with events/wfms")
+    sample_voltage_list = [1, 2, 3, 4, 5]
+
+    sample_time_list = [1, 2, 3, 4, 5]
+
+    time_array = array("I", [0])
+    voltage_array = array("f", 5*[0.])
+
+    tree.Branch("t1", time_array, "t1/I")
+    tree.Branch("w1", voltage_array, "w1[t1]/F")
+    for idx, val in enumerate(sample_time_list):
+        time_array[0] = val
+        for idy, volt_val in enumerate(sample_voltage_list):
+            voltage_array[idy] = volt_val
+        tree.Fill()
+
+    tree.Print()
+
+    tree_file.Write()
+    tree_file.Close()
+    ch = ROOT.TChain("wfm")
+    ch.Add("tester1.root")
+    ch.SetMarkerStyle(20)
+    print(ch.t1)
+    print(ch.w1[2])
+    for entry in ch.w1:
+        print(entry)
+
+
 
     """
-    h = ROOT.TH1F( 'h1', 'test', 100, -10., 10.)
-    f = ROOT.TFile('test.root', 'recreate')
-    t = ROOT.TTree('t1', 'tree with histos')
-    maxn = 10
-    n = array('i', [0])
-    d = array('f', maxn*[0.])
-    t.Branch('mynum', n, 'mynum/I')
-    t.Branch('myval', d, 'myval[mynum]/F')
-    for i in range(25):
-        n[0] = min(i, maxn)
-        for j in range(n[0]):
-            d[j] = i*0.1+j
-        t.Fill()
-    f.Write()
-    f.Close()
-    convert_to_vector(1.25e-12, open("sample4.dat").readlines())
-    """
+    # DAQ Logic Control
+    thread = Thread(target=ui_handler, args=(queue_stop,))
+    thread.start()
+    print(queue_stop.empty())
 
-    DaqRunner(lecroy_ip, num_events, active_channels, args.outfile, queue_stop, caen_ip, volt_list, caen_channel)
-    caen = Caen("192.168.2.4")
+    daq = DaqRunner(lecroy_ip, num_events, active_channels, args.outfile, queue_stop, caen_ip, volt_list, caen_channel)
+    thread.join()
