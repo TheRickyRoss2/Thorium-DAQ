@@ -23,8 +23,9 @@ class Oscilloscope(object):
             print("No ip address specified. Running in test mode.")
             return
         self.inst = ResourceManager().open_resource("TCPIP0::" + ip_address + "::inst0::INSTR")
-        print(self.inst.query("*IDN?;"))
-        self.inst.timeout = 10000
+        if "LECROY" in self.inst.query("*IDN?;"):
+            print("Connected to LeCroy WavePro")
+        self.inst.timeout = 60000
         # self.inst.write(":WAV:FORM WORD;")
 
     def configure_channel(self, channel_number, volts_per_div):
@@ -46,9 +47,9 @@ class Oscilloscope(object):
         :param thresh_level: voltage level for trigger
         :return: None
         """
-        self.inst.write(":TRIG:EDGE:SOUR %s;:TRIG:EDGE:SLOP %s;".format(channel_number, edge_slope))
-        self.inst.write(":TRIG:LEV %s,%s;".format(channel_number, thresh_level))
-        self.inst.write(":TRIG:MODE NORM;")
+        self.inst.write("C{}:TRig_LeVel {}V;:TRIG:EDGE:SLOP %s;".format(channel_number, thresh_level))
+        self.inst.write("C{}:TRig_SLope {};".format(channel_number, edge_slope))
+        # self.inst.write(":TRIG:MODE NORM;")
 
     def get_waveforms(self):
         """
