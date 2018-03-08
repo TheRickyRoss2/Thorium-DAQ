@@ -5,12 +5,12 @@ __project__ = "Thorium DAQ"
 
 import argparse
 import configparser
+import signal
 import sys
 import time
 from copy import deepcopy
 from queue import Queue
 from re import sub
-from threading import Thread
 
 import ROOT
 
@@ -20,14 +20,13 @@ from lecroy import Oscilloscope
 queue_stop = Queue()
 
 
-def ui_handler(interrupt_queue):
-    time.sleep(10)
-    while True:
-        command = input()
-        if "s" in command.lower() or not queue_stop.empty():
-            break
+def signal_hanlder(signal, frame):
     queue_stop.put("STOP")
     print("STOPPING EXPERIMENT")
+    sys.exit(-1)
+    while not queue_stop.empty():
+        pass
+
 
 
 class DaqRunner(object):
@@ -76,8 +75,8 @@ class DaqRunner(object):
                     self.scope.arm_trigger("1", "NEG", str(float(volt) / 1000.))
 
                     if self.use_caen:
-                        if self.caen.overcurrent():
-                            break
+                        # if self.caen.overcurrent():
+                        #    break
                         self.caen.set_output(self.caen_channel, volt)
                         time.sleep(5)
                         while "RAMP UP" in self.caen.status_check(self.caen_channel):
@@ -89,8 +88,8 @@ class DaqRunner(object):
 
             else:
                 if self.use_caen:
-                    if self.caen.overcurrent():
-                        break
+                    # if self.caen.overcurrent():
+                    #    break
                     self.caen.set_output(self.caen_channel, volt)
                     time.sleep(5)
                     while "RAMP UP" in self.caen.status_check(self.caen_channel):
@@ -110,7 +109,7 @@ class DaqRunner(object):
             self.caen.close()
 
         print("Acqusition complete")
-
+        self.stop_queue.clear()
         self.scope.close()
 
     def dump_data(self, current_trigger, current_voltage):
@@ -152,7 +151,6 @@ class DaqRunner(object):
             tree.Branch("w4", vector_voltage_4)
             tree.Branch("t4", vector_time_4)
 
-        list_test = [vector_time_1, vector_time_2]
 
         for event in self.list_events:
             if event[0]:
@@ -165,8 +163,8 @@ class DaqRunner(object):
                     vector_voltage_2.push_back(data[1])
             if event[2]:
                 for data in event[2]:
-                    vector_time_2.push_back(data[0])
-                    vector_voltage_2.push_back(data[1])
+                    vector_time_3.push_back(data[0])
+                    vector_voltage_3.push_back(data[1])
             if event[3]:
                 for data in event[3]:
                     vector_time_4.push_back(data[0])
@@ -312,12 +310,10 @@ $$$$$$$$/ $$ |____    ______    ______  $$/  __    __  _____  ____
     num_events = config.get("daq", "events")
 
     # DAQ Logic Control
-    thread = Thread(target=ui_handler, args=(queue_stop,))
-    thread.start()
+    signal.signal(signal.SIGINT, signal_hanlder)
 
     daq = DaqRunner(lecroy_ip, num_events, active_channels,
                     args.outfile, queue_stop,
                     caen_ip, volt_list, caen_channel, using_caen,
                     trigger_values
                     )
-    sys.exit(0)
