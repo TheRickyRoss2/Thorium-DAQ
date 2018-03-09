@@ -128,13 +128,16 @@ class Caen(object):
 
         return status
 
-    def alarm_check(self):
+    def overcurrent(self):
         """
         Checks device for errors, but mainly looking for IMON>ISET
         :return: True if device checks out
         """
-        response = int(self.query("$BD:0,CMD:MON,PAR:BDALARM"))
+        response = int(self.get_response_value(self.query("$BD:0,CMD:MON,PAR:BDALARM")))
         # TODO Logic for discerning bits
+        if int(self.caen_channel) & response:
+            return True
+        return False
         # Bits 0-3 correspond to channels; if one of these bits is set then trigger alarm
 
     def close(self):

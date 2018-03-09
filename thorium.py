@@ -5,10 +5,10 @@ __project__ = "Thorium DAQ"
 
 import argparse
 import configparser
+import gc
 import signal
 import sys
 import time
-from copy import deepcopy
 from queue import Queue
 from re import sub
 
@@ -20,7 +20,7 @@ from lecroy import Oscilloscope
 queue_stop = Queue()
 
 
-def signal_hanlder(signal, frame):
+def signal_handler(signal, frame):
     queue_stop.put("STOP")
     print("STOPPING EXPERIMENT")
     sys.exit(-1)
@@ -34,7 +34,6 @@ class DaqRunner(object):
     Data Acqusition state machine
     """
     list_events = []
-    timestamp_list = []
 
     def __init__(self, scope_ip, num_events, active_channels, output_filename, stop_queue,
                  caen_ip, volt_list, caen_channel, using_caen,
@@ -75,8 +74,8 @@ class DaqRunner(object):
                     self.scope.arm_trigger("1", "NEG", str(float(volt) / 1000.))
 
                     if self.use_caen:
-                        # if self.caen.overcurrent():
-                        #    break
+                        if self.caen.overcurrent():
+                            break
                         self.caen.set_output(self.caen_channel, volt)
                         time.sleep(5)
                         while "RAMP UP" in self.caen.status_check(self.caen_channel):
@@ -88,8 +87,8 @@ class DaqRunner(object):
 
             else:
                 if self.use_caen:
-                    # if self.caen.overcurrent():
-                    #    break
+                    if self.caen.overcurrent():
+                        break
                     self.caen.set_output(self.caen_channel, volt)
                     time.sleep(5)
                     while "RAMP UP" in self.caen.status_check(self.caen_channel):
@@ -109,7 +108,6 @@ class DaqRunner(object):
             self.caen.close()
 
         print("Acqusition complete")
-        self.stop_queue.clear()
         self.scope.close()
 
     def dump_data(self, current_trigger, current_voltage):
@@ -183,11 +181,8 @@ class DaqRunner(object):
         tree_file.Write()
         tree_file.Close()
 
-        output_file = open("{}_{}mV_trig_200V.time".format(self.output_filename, current_voltage), 'w')
-        for event_num, event_time in enumerate(self.list_events):
-            output_file.write("{}:{}\n\n".format(event_num, event_time))
-        output_file.close()
-
+        self.list_events.clear()
+        gc.collect()
 
     def get_events(self):
         """
@@ -201,7 +196,6 @@ class DaqRunner(object):
             if not self.stop_queue.empty():
                 print("STOPPING DAQ")
                 return
-            self.timestamp_list.append(time.time())
             # event_wfm = self.scope.get_waveforms()
             command_payload = ""
             for channel_number, active_channel in enumerate(self.channels):
@@ -254,7 +248,7 @@ class DaqRunner(object):
                             time_idx += 1
                         except:
                             pass
-            list_channel_wfms[cur_channel] = deepcopy(waveform)
+            list_channel_wfms[cur_channel] = waveform
 
         return list_channel_wfms
 
@@ -310,7 +304,7 @@ $$$$$$$$/ $$ |____    ______    ______  $$/  __    __  _____  ____
     num_events = config.get("daq", "events")
 
     # DAQ Logic Control
-    signal.signal(signal.SIGINT, signal_hanlder)
+    signal.signal(signal.SIGINT, signal_handler)
 
     daq = DaqRunner(lecroy_ip, num_events, active_channels,
                     args.outfile, queue_stop,
