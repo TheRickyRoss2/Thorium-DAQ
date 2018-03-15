@@ -45,7 +45,7 @@ class Caen_control(object):
             self.test = True
             return
 
-        if "ok" in self.inst.query("BD:0,CMD:MON,PAR:BDNAME").lower():
+        if "ok" in self.inst.query("$BD:0,CMD:MON,PAR:BDNAME").lower():
             print("Successfully connected to CAEN psu")
         else:
             sys.exit(ERROR_BOARD_NOT_FOUND)
