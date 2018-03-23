@@ -12,7 +12,7 @@ def dump_data(output_filename, current_trigger, current_voltage, list_events, ch
     """
 
     tree_file = ROOT.TFile(
-        "{}_{}_trig_{}V.root".format(
+        "new_{}_{}_trig_{}V.root".format(
             output_filename,
             current_trigger,
             current_voltage),

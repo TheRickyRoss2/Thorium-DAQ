@@ -22,7 +22,7 @@ class Oscilloscope(object):
         if not ip_address:
             print("No ip address specified. Running in test mode.")
             return
-        self.inst = ResourceManager().open_resource("TCPIP0::" + ip_address + "::inst0::INSTR")
+        self.inst = ResourceManager("@py").open_resource("TCPIP0::" + ip_address + "::inst0::INSTR")
         if "LECROY" in self.inst.query("*IDN?;"):
             print("Connected to LeCroy WavePro")
         self.inst.timeout = 60000

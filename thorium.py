@@ -23,7 +23,7 @@ queue_stop = Queue()
 def signal_handler(signal, frame):
     queue_stop.put("STOP")
     print("STOPPING EXPERIMENT")
-    sys.exit(-1)
+    sys.exit(0)
     while not queue_stop.empty():
         pass
 
@@ -34,6 +34,7 @@ class DaqRunner(object):
     Data Acqusition state machine
     """
     list_events = []
+    list_currents = []
 
     def __init__(self, scope_ip, num_events, active_channels, output_filename, stop_queue,
                  caen_ip, volt_list, caen_channel, using_caen,
@@ -106,6 +107,11 @@ class DaqRunner(object):
             while "RAMP DOWN" in self.caen.status_check(self.caen_channel):
                 pass
             self.caen.close()
+        with open("{}_currents.csv".format(self.output_filename), "w") as currents_file:
+            for idx, volt in enumerate(self.volt_list):
+                currents_file.write("Begin,{},{}\n".format(volt, self.list_currents[idx][0]))
+                currents_file.write("Middle,{},{}\n".format(volt, self.list_currents[idx][1]))
+                currents_file.write("End,{},{}\n".format(volt, self.list_currents[idx][2]))
 
         print("Acqusition complete")
         self.scope.close()
@@ -178,6 +184,7 @@ class DaqRunner(object):
             vector_voltage_3.clear()
             vector_voltage_4.clear()
 
+
         tree_file.Write()
         tree_file.Close()
 
@@ -191,8 +198,17 @@ class DaqRunner(object):
         """
         start_time = 0
         end_time = 0
+        wfm_counter = 0
+        sublist_currents = [self.caen.read_current()]
+
 
         for event in range(int(self.num_events)):
+
+            if event % 100 == 0:
+                print("On event {}".format(event))
+            if event == int(self.num_events) // 2:
+                sublist_currents.append(self.caen.read_current())
+
             if not self.stop_queue.empty():
                 print("STOPPING DAQ")
                 return
@@ -206,6 +222,8 @@ class DaqRunner(object):
                     self.scope.inst.query("ARM; WAIT;" + command_payload)
                 )
             )
+        sublist_currents.append(self.caen.read_current())
+        self.list_currents.append(sublist_currents)
 
     def get_timebase(self):
         """

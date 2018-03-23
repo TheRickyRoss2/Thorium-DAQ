@@ -128,6 +128,14 @@ class Caen(object):
 
         return status
 
+    def read_current(self):
+        """
+        Reads current on CAEN channel
+        :return: float current
+        """
+        command_format = "$BD:0,CMD:MON,CH:{},PAR:IMON".format(self.caen_channel)
+        return float(self.get_response_value(self.query(command_format))) * 1e-6
+
     def overcurrent(self):
         """
         Checks device for errors, but mainly looking for IMON>ISET
