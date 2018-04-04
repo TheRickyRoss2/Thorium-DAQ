@@ -115,7 +115,7 @@ class DaqRunner(object):
 
         with open("{}_times.txt".format(self.output_filename), "w") as times_file:
             for item in self.list_times:
-                times_file.write("{}\n".format(item))
+                times_file.write("{}\n".format(str(item)))
 
 
         print("Acqusition complete")
@@ -228,7 +228,7 @@ class DaqRunner(object):
                 )
             )
 
-            self.list_times.append("EVENT:{},".format(event) + str(time.time()))
+            self.list_times.append("EVENT:{},".format(str(event)) + str(time.time()))
 
         if self.use_caen:
             sublist_currents.append(self.caen.read_current())
