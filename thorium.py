@@ -28,7 +28,6 @@ def signal_handler(signal, frame):
         pass
 
 
-
 class DaqRunner(object):
     """
     Data Acqusition state machine
@@ -161,7 +160,6 @@ class DaqRunner(object):
             tree.Branch("w4", vector_voltage_4)
             tree.Branch("t4", vector_time_4)
 
-
         for event in self.list_events:
             if event[0]:
                 for data in event[0]:
@@ -189,7 +187,6 @@ class DaqRunner(object):
             vector_voltage_2.clear()
             vector_voltage_3.clear()
             vector_voltage_4.clear()
-
 
         tree_file.Write()
         tree_file.Close()
@@ -231,7 +228,8 @@ class DaqRunner(object):
                 )
             )
 
-            self.list_times.append("WF:{} ".format(event) + str(time.time()))
+            self.list_times.append("EVENT:{},".format(event) + str(time.time()))
+
         if self.use_caen:
             sublist_currents.append(self.caen.read_current())
             self.list_currents.append(sublist_currents)
