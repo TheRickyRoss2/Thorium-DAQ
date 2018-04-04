@@ -1,4 +1,4 @@
-#!/usr/local/bin/python3
+#!/usr/bin/python3
 __author__ = "Ric Rodriguez"
 __email__ = "therickyross2@gmail.com"
 __project__ = "Thorium DAQ"
@@ -35,6 +35,7 @@ class DaqRunner(object):
     """
     list_events = []
     list_currents = []
+    list_times = []
 
     def __init__(self, scope_ip, num_events, active_channels, output_filename, stop_queue,
                  caen_ip, volt_list, caen_channel, using_caen,
@@ -112,6 +113,11 @@ class DaqRunner(object):
                 currents_file.write("Begin,{},{}\n".format(volt, self.list_currents[idx][0]))
                 currents_file.write("Middle,{},{}\n".format(volt, self.list_currents[idx][1]))
                 currents_file.write("End,{},{}\n".format(volt, self.list_currents[idx][2]))
+
+        with open("{}_times.txt".format(self.output_filename), "w") as times_file:
+            for item in self.list_times:
+                times_file.write("{}\n".format(item))
+
 
         print("Acqusition complete")
         self.scope.close()
@@ -199,14 +205,15 @@ class DaqRunner(object):
         start_time = 0
         end_time = 0
         wfm_counter = 0
-        sublist_currents = [self.caen.read_current()]
-
+        sublist_currents = []
+        if self.use_caen:
+            sublist_currents.append(self.caen.read_current())
 
         for event in range(int(self.num_events)):
 
             if event % 100 == 0:
                 print("On event {}".format(event))
-            if event == int(self.num_events) // 2:
+            if event == int(self.num_events) // 2 and self.use_caen:
                 sublist_currents.append(self.caen.read_current())
 
             if not self.stop_queue.empty():
@@ -217,13 +224,17 @@ class DaqRunner(object):
             for channel_number, active_channel in enumerate(self.channels):
                 if active_channel:
                     command_payload += "C{}:INSPECT? SIMPLE;".format(str(channel_number + 1))
+
             self.list_events.append(
                 self.convert_to_vector(
                     self.scope.inst.query("ARM; WAIT;" + command_payload)
                 )
             )
-        sublist_currents.append(self.caen.read_current())
-        self.list_currents.append(sublist_currents)
+
+            self.list_times.append("WF:{} ".format(event) + str(time.time()))
+        if self.use_caen:
+            sublist_currents.append(self.caen.read_current())
+            self.list_currents.append(sublist_currents)
 
     def get_timebase(self):
         """
