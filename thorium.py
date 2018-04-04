@@ -12,10 +12,10 @@ import time
 from queue import Queue
 from re import sub
 
-import ROOT
-
 from caen import Caen
 from lecroy import Oscilloscope
+
+# import ROOT
 
 queue_stop = Queue()
 
@@ -117,7 +117,6 @@ class DaqRunner(object):
             for item in self.list_times:
                 times_file.write("{}\n".format(str(item)))
 
-
         print("Acqusition complete")
         self.scope.close()
 
@@ -127,7 +126,34 @@ class DaqRunner(object):
         events->channels->voltage readings
         :return: None
         """
+        with open("{}_{}_trig_{}V.text".format(self.output_filename,
+                                               current_trigger,
+                                               current_voltage), "w") as output_file:
+            for num, event in enumerate(self.list_events):
+                output_file.write("EVENT:{}:START".format(num))
+                if event[0]:
+                    output_file.write("CHAN:0:START")
+                    for data in event[0]:
+                        output_file.write("{},{}".format(data[0], data[1]))
+                    output_file.write("CHAN:0:END")
+                if event[1]:
+                    output_file.write("CHAN:1:START")
+                    for data in event[0]:
+                        output_file.write("{},{}".format(data[0], data[1]))
+                    output_file.write("CHAN:1:END")
+                if event[2]:
+                    output_file.write("CHAN:2:START")
+                    for data in event[0]:
+                        output_file.write("{},{}".format(data[0], data[1]))
+                    output_file.write("CHAN:2:END")
+                if event[3]:
+                    output_file.write("CHAN:3:START")
+                    for data in event[0]:
+                        output_file.write("{},{}".format(data[0], data[1]))
+                    output_file.write("CHAN:3:END")
+                output_file.write("EVENT:{}:END".format(num))
 
+        """
         tree_file = ROOT.TFile(
             "{}_{}_trig_{}V.root".format(
                 self.output_filename,
@@ -190,6 +216,7 @@ class DaqRunner(object):
 
         tree_file.Write()
         tree_file.Close()
+        """
 
         self.list_events.clear()
         gc.collect()
