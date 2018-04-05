@@ -107,11 +107,11 @@ class DaqRunner(object):
             while "RAMP DOWN" in self.caen.status_check(self.caen_channel):
                 pass
             self.caen.close()
-        with open("{}_currents.csv".format(self.output_filename), "w") as currents_file:
-            for idx, volt in enumerate(self.volt_list):
-                currents_file.write("Begin,{},{}\n".format(volt, self.list_currents[idx][0]))
-                currents_file.write("Middle,{},{}\n".format(volt, self.list_currents[idx][1]))
-                currents_file.write("End,{},{}\n".format(volt, self.list_currents[idx][2]))
+            with open("{}_currents.csv".format(self.output_filename), "w") as currents_file:
+                for idx, volt in enumerate(self.volt_list):
+                    currents_file.write("Begin,{},{}\n".format(volt, self.list_currents[idx][0]))
+                    currents_file.write("Middle,{},{}\n".format(volt, self.list_currents[idx][1]))
+                    currents_file.write("End,{},{}\n".format(volt, self.list_currents[idx][2]))
 
         with open("{}_times.txt".format(self.output_filename), "w") as times_file:
             for item in self.list_times:
