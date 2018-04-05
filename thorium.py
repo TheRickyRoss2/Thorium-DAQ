@@ -130,28 +130,28 @@ class DaqRunner(object):
                                                current_trigger,
                                                current_voltage), "w") as output_file:
             for num, event in enumerate(self.list_events):
-                output_file.write("EVENT:{}:START".format(num))
+                output_file.write("EVENT:{}:START\n".format(num))
                 if event[0]:
-                    output_file.write("CHAN:0:START")
+                    output_file.write("CHAN:0:START\n")
                     for data in event[0]:
-                        output_file.write("{},{}".format(data[0], data[1]))
-                    output_file.write("CHAN:0:END")
+                        output_file.write("{},{}\n".format(data[0], data[1]))
+                    output_file.write("CHAN:0:END\n")
                 if event[1]:
-                    output_file.write("CHAN:1:START")
+                    output_file.write("CHAN:1:START\n")
                     for data in event[1]:
-                        output_file.write("{},{}".format(data[0], data[1]))
-                    output_file.write("CHAN:1:END")
+                        output_file.write("{},{}\n".format(data[0], data[1]))
+                    output_file.write("CHAN:1:END\n")
                 if event[2]:
-                    output_file.write("CHAN:2:START")
+                    output_file.write("CHAN:2:START\n")
                     for data in event[2]:
-                        output_file.write("{},{}".format(data[0], data[1]))
-                    output_file.write("CHAN:2:END")
+                        output_file.write("{},{}\n".format(data[0], data[1]))
+                    output_file.write("CHAN:2:END\n")
                 if event[3]:
-                    output_file.write("CHAN:3:START")
+                    output_file.write("CHAN:3:START\n")
                     for data in event[3]:
-                        output_file.write("{},{}".format(data[0], data[1]))
-                    output_file.write("CHAN:3:END")
-                output_file.write("EVENT:{}:END".format(num))
+                        output_file.write("{},{}\n".format(data[0], data[1]))
+                    output_file.write("CHAN:3:END\n")
+                output_file.write("EVENT:{}:END\n".format(num))
 
         """
         tree_file = ROOT.TFile(
