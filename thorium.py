@@ -138,17 +138,17 @@ class DaqRunner(object):
                     output_file.write("CHAN:0:END")
                 if event[1]:
                     output_file.write("CHAN:1:START")
-                    for data in event[0]:
+                    for data in event[1]:
                         output_file.write("{},{}".format(data[0], data[1]))
                     output_file.write("CHAN:1:END")
                 if event[2]:
                     output_file.write("CHAN:2:START")
-                    for data in event[0]:
+                    for data in event[2]:
                         output_file.write("{},{}".format(data[0], data[1]))
                     output_file.write("CHAN:2:END")
                 if event[3]:
                     output_file.write("CHAN:3:START")
-                    for data in event[0]:
+                    for data in event[3]:
                         output_file.write("{},{}".format(data[0], data[1]))
                     output_file.write("CHAN:3:END")
                 output_file.write("EVENT:{}:END".format(num))
