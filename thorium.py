@@ -205,7 +205,9 @@ class DaqRunner(object):
             sublist_currents.append(self.caen.read_current())
 
         for position in range(len(self.positions)):
+            self.set_timebase(200, "us")
             self.change_positions()
+            self.set_timebase(5, "ns")
             self.scope.arm_trigger("EX", "POS", "0.1")
 
             for event in range(int(self.num_events)):
@@ -242,6 +244,10 @@ class DaqRunner(object):
         raw_dt = self.scope.inst.query("C2:INSPECT? HORIZ_INTERVAL")
         dt = float(raw_dt.split(":")[2].split(" ")[1])
         self.dt = dt
+
+    def set_timebase(self, secs, unit):
+        self.scope.inst.write("TDIV {}{}".format(secs, unit))
+        self.scope.inst.query("*OPC?")
 
     def convert_to_vector(self, values):
         """
@@ -281,7 +287,7 @@ class DaqRunner(object):
         self.scope.arm_trigger("C1", "POS", "1")
         self.scope.write("ARM; WAIT;")
         self.scope.inst.timeout = 60000 * 5
-        self.scope.query("*OPC")
+        self.scope.query("*OPC?")
 
     def test(self):
         self.scope.inst.write("ARM; WAIT; C2:WF?")
