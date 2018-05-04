@@ -6,6 +6,7 @@ __project__ = "Thorium DAQ"
 import argparse
 import configparser
 import gc
+import io
 import signal
 import sys
 import time
@@ -16,6 +17,7 @@ import ROOT
 
 from caen import Caen
 from lecroy import Oscilloscope
+from lecroy_support import readTrc
 
 queue_stop = Queue()
 
@@ -65,6 +67,7 @@ class DaqRunner(object):
         self.stop_queue = stop_queue
         self.positions = positions
         # print(self.scope.inst.query("C2:INSPECT? HORIZ_OFFSET;"))
+        self.test()
 
         for volt in self.volt_list:
             if self.trigger_list is not None:
@@ -262,7 +265,6 @@ class DaqRunner(object):
         Helper function for converting the values from the oscilloscope
         to a vectorized quantity suitable for translation to a root TTree
         :param values: Raw oscilloscope voltage values
-        :param channels: which channels are active
         :return: Vectorized representation of oscilloscope values
         """
         list_channel_wfms = [None] * 4
@@ -297,6 +299,15 @@ class DaqRunner(object):
         self.scope.write("ARM; WAIT;")
         self.scope.inst.timeout = 60000 * 5
         self.scope.query("*OPC")
+
+    def test(self):
+        self.scope.inst.write("ARM; WAIT; C2:WF?")
+        x, y, aux = readTrc(io.StringIO(self.scope.inst.read_raw()))
+        print(x)
+        print(y)
+        print(aux)
+        input("Continue? [Y/n]:")
+
 
 
 if __name__ == "__main__":
@@ -361,7 +372,6 @@ $$$$$$$$/ $$ |____    ______    ______  $$/  __    __  _____  ____
     for i in range(x_steps + 1):
         for j in range(y_steps + 1):
             positions.append((x_start + (x_end - x_start) * i / x_steps, y_start + (y_end - y_start) * j / y_steps))
-
 
     # DAQ Logic Control
     signal.signal(signal.SIGINT, signal_handler)
