@@ -47,9 +47,9 @@ class Oscilloscope(object):
         :param thresh_level: voltage level for trigger
         :return: None
         """
-        self.inst.write("C{}:TRig_LeVel {}V;:TRIG:EDGE:SLOP %s;".format(channel_number, thresh_level))
-        self.inst.write("C{}:TRig_SLope {};".format(channel_number, edge_slope))
-        # self.inst.write(":TRIG:MODE NORM;")
+        self.inst.write("{}:TRig_LeVel {}V;".format(channel_number, thresh_level))
+        self.inst.write("{}:TRig_SLope {};".format(channel_number, edge_slope))
+        self.inst.write("{}:TRIG:MODE NORM;")
 
     def get_waveforms(self):
         """
