@@ -7,10 +7,8 @@ import argparse
 import configparser
 import gc
 import io
-import signal
 import sys
 import time
-from queue import Queue
 from re import sub
 
 import ROOT
@@ -18,16 +16,6 @@ import ROOT
 from caen import Caen
 from lecroy import Oscilloscope
 from lecroy_support import readTrc
-
-queue_stop = Queue()
-
-
-def signal_handler(signal, frame):
-    queue_stop.put("STOP")
-    print("STOPPING EXPERIMENT")
-    sys.exit(0)
-    while not queue_stop.empty():
-        pass
 
 
 class DaqRunner(object):
@@ -38,7 +26,7 @@ class DaqRunner(object):
     list_currents = []
     list_times = []
 
-    def __init__(self, scope_ip, num_events, active_channels, output_filename, stop_queue,
+    def __init__(self, scope_ip, num_events, active_channels, output_filename,
                  caen_ip, volt_list, caen_channel, using_caen,
                  trigger_list, positions
                  ):
@@ -64,7 +52,6 @@ class DaqRunner(object):
         self.scope = Oscilloscope(scope_ip)
         self.channels = active_channels
         self.dt = 0
-        self.stop_queue = stop_queue
         self.positions = positions
         # print(self.scope.inst.query("C2:INSPECT? HORIZ_OFFSET;"))
         self.test()
@@ -72,8 +59,6 @@ class DaqRunner(object):
         for volt in self.volt_list:
             if self.trigger_list is not None:
                 for trigger in self.trigger_list:
-                    if not self.stop_queue.empty():
-                        break
 
                     print("Trig {}".format(trigger))
                     self.scope.arm_trigger("1", "NEG", str(float(volt) / 1000.))
@@ -230,9 +215,7 @@ class DaqRunner(object):
                 if event == int(self.num_events) // 2 and self.use_caen:
                     sublist_currents.append(self.caen.read_current())
 
-                if not self.stop_queue.empty():
-                    print("STOPPING DAQ")
-                    return
+
                 # event_wfm = self.scope.get_waveforms()
                 command_result = ""
                 self.scope.inst.write("ARM; WAIT;")
@@ -374,10 +357,9 @@ $$$$$$$$/ $$ |____    ______    ______  $$/  __    __  _____  ____
             positions.append((x_start + (x_end - x_start) * i / x_steps, y_start + (y_end - y_start) * j / y_steps))
 
     # DAQ Logic Control
-    signal.signal(signal.SIGINT, signal_handler)
 
     daq = DaqRunner(lecroy_ip, num_events, active_channels,
-                    args.outfile, queue_stop,
+                    args.outfile,
                     caen_ip, volt_list, caen_channel, using_caen,
                     trigger_values, positions
                     )
