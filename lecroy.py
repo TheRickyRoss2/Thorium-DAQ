@@ -99,3 +99,4 @@ class Oscilloscope(object):
         Close visa instance
         """
         self.inst.close()
+

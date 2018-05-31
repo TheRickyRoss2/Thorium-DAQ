@@ -31,6 +31,7 @@ def readTrc(fName):
         M. Betz 09/2015
     """
     with open(fName, "rb") as fid:
+
         data = fid.read(50).decode()
         wdOffset = data.find('WAVEDESC')
 
@@ -134,9 +135,9 @@ def readTrc(fName):
         if endi == ">":
             y.byteswap(True)
         y = d["VERTICAL_GAIN"] * y - d["VERTICAL_OFFSET"]
-        x = np.arange(1, len(y) + 1) * d["HORIZ_INTERVAL"] + d["HORIZ_OFFSET"]
+        x = np.arange(1, len(y) + 1) * d["HORIZ_INTERVAL"]
 
-    return x, y, d
+    return x, y, d["TRIGGER_TIME"]
 
 
 def readX(fid, fmt, adr=None):
@@ -160,4 +161,4 @@ def getTimeStamp(fid, endi, adr):
     M = readX(fid, endi + "b")
     Y = readX(fid, endi + "h")
     trigTs = datetime.datetime(Y, M, D, h, m, int(s), int((s - int(s)) * 1e6))
-    return trigTs
+    return trigTs.timestamp()

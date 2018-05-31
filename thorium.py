@@ -28,8 +28,7 @@ class DaqRunner(object):
 
     def __init__(self, scope_ip, num_events, active_channels, output_filename,
                  caen_ip, volt_list, caen_channel, using_caen,
-                 trigger_list, positions
-                 ):
+                 trigger_list):
         """
         Initializer function for the DAQ state machine
         :param ip_address: IP address of scope
@@ -52,9 +51,7 @@ class DaqRunner(object):
         self.scope = Oscilloscope(scope_ip)
         self.channels = active_channels
         self.dt = 0
-        self.positions = positions
         # print(self.scope.inst.query("C2:INSPECT? HORIZ_OFFSET;"))
-        self.test()
 
         for volt in self.volt_list:
             if self.trigger_list is not None:
@@ -83,7 +80,6 @@ class DaqRunner(object):
                     time.sleep(5)
                     while "RAMP UP" in self.caen.status_check(self.caen_channel):
                         pass
-
                 self.get_timebase()
                 time_start = time.time()
                 self.get_events()
@@ -135,9 +131,6 @@ class DaqRunner(object):
         vector_voltage_4 = ROOT.vector("double")()
         vector_time_4 = ROOT.vector("double")()
 
-        vector_pos_x = ROOT.vector("double")()
-        vector_pos_y = ROOT.vector("double")()
-
         if self.channels[0]:
             tree.Branch("w1", vector_voltage_1)
             tree.Branch("t1", vector_time_1)
@@ -151,28 +144,23 @@ class DaqRunner(object):
             tree.Branch("w4", vector_voltage_4)
             tree.Branch("t4", vector_time_4)
 
-        tree.Branch("pos_x", vector_pos_x)
-        tree.Branch("pos_y", vector_pos_y)
-
         for event in self.list_events:
-            if event[0][0]:
-                for data in event[0]:
-                    vector_time_1.push_back(data[0])
-                    vector_voltage_1.push_back(data[1])
-            if event[0][1]:
-                for data in event[1]:
-                    vector_time_2.push_back(data[0])
-                    vector_voltage_2.push_back(data[1])
-            if event[0][2]:
-                for data in event[2]:
-                    vector_time_3.push_back(data[0])
-                    vector_voltage_3.push_back(data[1])
-            if event[0][3]:
-                for data in event[3]:
-                    vector_time_4.push_back(data[0])
-                    vector_voltage_4.push_back(data[1])
-            vector_pos_x.push_back(event[1][0])
-            vector_pos_y.push_back(event[1][1])
+            if event[0]:
+                for idx in range(len(event[0][0])):
+                    vector_time_1.push_back(event[0][0][idx])
+                    vector_voltage_1.push_back(event[0][1][idx])
+            if event[1]:
+                for idx in range(len(event[1][0])):
+                    vector_time_2.push_back(event[1][0][idx])
+                    vector_voltage_2.push_back(event[1][1][idx])
+            if event[2]:
+                for idx in range(len(event[2][0])):
+                    vector_time_3.push_back(event[2][0][idx])
+                    vector_voltage_3.push_back(event[2][1][idx])
+            if event[3]:
+                for idx in range(len(event[3][0])):
+                    vector_time_4.push_back(event[3][0][idx])
+                    vector_voltage_4.push_back(event[3][1][idx])
 
             tree.Fill()
             vector_time_1.clear()
@@ -183,8 +171,6 @@ class DaqRunner(object):
             vector_voltage_2.clear()
             vector_voltage_3.clear()
             vector_voltage_4.clear()
-            vector_pos_x.clear()
-            vector_pos_y.clear()
 
         tree_file.Write()
         tree_file.Close()
@@ -204,36 +190,37 @@ class DaqRunner(object):
         if self.use_caen:
             sublist_currents.append(self.caen.read_current())
 
+        """
         for position in range(len(self.positions)):
             self.set_timebase(200, "us")
             self.change_positions()
             self.set_timebase(5, "ns")
             self.scope.arm_trigger("EX", "POS", "0.1")
+        """
 
-            for event in range(int(self.num_events)):
-
-                if event % 100 == 0:
-                    print("On event {}".format(event))
-                if event == int(self.num_events) // 2 and self.use_caen:
-                    sublist_currents.append(self.caen.read_current())
-
-
-                # event_wfm = self.scope.get_waveforms()
-                command_result = ""
-                self.scope.inst.write("ARM; WAIT;")
-                for channel_number, active_channel in enumerate(self.channels):
-                    if active_channel:
-                        command_result += self.scope.inst.query("C{}:INSPECT? SIMPLE;".format(str(channel_number + 1)))
-
-                self.list_events.append((
-                    self.convert_to_vector(command_result), position
-                ))
-
-                self.list_times.append("EVENT:{},".format(str(event)) + str(time.time()))
-
-            if self.use_caen:
+        for event in range(int(self.num_events)):
+            list_channel_wfms = [None] * 4
+            if event % 100 == 0:
+                print("On event {}".format(event))
+            if event == int(self.num_events) // 2 and self.use_caen:
                 sublist_currents.append(self.caen.read_current())
-                self.list_currents.append(sublist_currents)
+
+            # event_wfm = self.scope.get_waveforms()
+            time = 0
+            self.scope.inst.write("ARM; WAIT;")
+            for channel_number, active_channel in enumerate(self.channels):
+                if active_channel:
+                    x, y, time = self.get_wfm(active_channel + 1)
+                    list_channel_wfms[active_channel] = (x, y)
+                    # command_result += self.scope.inst.query("C{}:INSPECT? SIMPLE;".format(str(channel_number + 1)))
+
+            self.list_events.append(list_channel_wfms)
+
+            self.list_times.append("EVENT:{},".format(str(event)) + str(time))
+
+        if self.use_caen:
+            sublist_currents.append(self.caen.read_current())
+            self.list_currents.append(sublist_currents)
 
     def get_timebase(self):
         """
@@ -289,17 +276,18 @@ class DaqRunner(object):
         self.scope.inst.timeout = 60000 * 5
         self.scope.query("*OPC?")
 
-    def test(self):
-        self.scope.inst.write("ARM; WAIT; C2:WF?")
-        x, y, aux = readTrc(io.StringIO(self.scope.inst.read_raw()))
-        print(x)
-        print(y)
-        print(aux)
-        input("Continue? [Y/n]:")
+    def get_wfm(self, ch):
+        self.scope.inst.write("C{}:WF?;".format(ch))
+        self.write_tmp_wfm(io.BytesIO(self.scope.inst.read_raw()))
+        x, y, time = readTrc("tmp.wfm")
+        return x, y, time
+
+    def write_tmp_wfm(self, stream):
+        with open("tmp.wfm", 'wb') as f:
+            f.write(stream.read())
 
 
-
-if __name__ == "__main__":
+def main():
 
     # Info section
     print("""Welcome to
@@ -349,23 +337,14 @@ $$$$$$$$/ $$ |____    ______    ______  $$/  __    __  _____  ____
     using_caen = config.getboolean("caen", "use")
     num_events = config.get("daq", "events")
 
-    x_start = config.getfloat("daq", "x_start")
-    x_end = config.getfloat("daq", "x_end")
-    x_steps = config.getint("daq", "x_steps")
-
-    y_start = config.getfloat("daq", "y_start")
-    y_end = config.getfloat("daq", "y_end")
-    y_steps = config.getint("daq", "y_steps")
-
-    positions = []
-    for i in range(x_steps + 1):
-        for j in range(y_steps + 1):
-            positions.append((x_start + (x_end - x_start) * i / x_steps, y_start + (y_end - y_start) * j / y_steps))
-
     # DAQ Logic Control
 
     daq = DaqRunner(lecroy_ip, num_events, active_channels,
                     args.outfile,
                     caen_ip, volt_list, caen_channel, using_caen,
-                    trigger_values, positions
+                    trigger_values
                     )
+
+
+if __name__ == "__main__":
+    main()
